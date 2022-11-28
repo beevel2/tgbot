@@ -37,7 +37,7 @@ async def start_command(message: types.Message, is_admin: bool):
         await db.create_user(user)
     if ref and ref < 10000:
         await db.add_partner_visit(ref)
-    elif ref and ref != message.from_user.id:
+    elif ref and ref != message.from_user.id and user_in_db and user_in_db['refer_id'] is None:
         refs = await db.write_refs(message.from_user.id, ref)
         text1 = await db.get_message("message_ref1")
         text2 = await db.get_message("message_ref2")
@@ -57,7 +57,7 @@ async def start_command(message: types.Message, is_admin: bool):
             text_send = utils.replace_in_message(text2, 'COST_REF2', cost_ref2)
             text_send = utils.replace_in_message(text_send, 'COUNT_REFERRAL', len(_user['referral2_id']))
             text_send = utils.replace_in_message(text_send, 'BALANCE', _user['balance'])
-            await bot.send_message(ref, text_send)
+            await bot.send_message(_ref, text_send)
 
     text = await db.get_message('message_start')
     await message.answer(text, reply_markup=kb.kb_start)
