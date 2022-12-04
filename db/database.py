@@ -184,6 +184,7 @@ async def get_next_gift(tg_id: int):
             )
             return gift
     
+    gift = gifts[0]
     await col_user.find_one_and_update(
         {'tg_id': tg_id}, {"$set": {"gifts": [gift['_id']]}}
     )
