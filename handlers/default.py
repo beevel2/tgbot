@@ -25,6 +25,7 @@ async def start_command(message: types.Message, is_admin: bool):
         ref = int(ref[-1])
     else:
         ref = None
+    print(f'REF_ID: {ref}')
     user_in_db = await db.get_user_by_tg_id(message.from_user.id)
     new_user = False
     if user_in_db is None:
@@ -39,7 +40,7 @@ async def start_command(message: types.Message, is_admin: bool):
         new_user = True
     if ref and ref < 10000:
         await db.add_partner_visit(ref)
-    elif ref and ref != message.from_user.id and new_user is None:
+    elif ref and ref != message.from_user.id and new_user:
         refs = await db.write_refs(message.from_user.id, ref)
         text1 = await db.get_message("message_ref1")
         text2 = await db.get_message("message_ref2")
