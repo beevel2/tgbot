@@ -331,6 +331,7 @@ async def mass_send_process_command(
                     })
             
             user_ids = await db.get_id_all_users()
+            success_send = 0
             for _user in user_ids:
                 _kb = kb.kb_mass_send(buttons) if buttons else None
                 try:
@@ -341,12 +342,14 @@ async def mass_send_process_command(
                         parse_mode=types.ParseMode.HTML,
                         reply_markup=_kb
                     )
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.8)
+                    success_send += 1
                 except Exception as e:
                     print(f"ОШИБКА MASS SEND: {e}")
                 
             text = await db.get_message("message_mass_send_success")
             await message.answer(text)
+            await message.answer(f"Успешно отправлено {success_send} из {len(user_ids)} сообщений")
 
 
             await state.reset_data()
