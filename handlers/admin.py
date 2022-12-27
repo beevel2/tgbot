@@ -306,6 +306,7 @@ async def mass_send_process_command(
     if not is_admin:
         return
     _state = await state.get_state()
+    success_send = 0
     try:
         if _state == MassSendStates.STATE_SEND_POST:
             await state.set_data(
@@ -331,7 +332,6 @@ async def mass_send_process_command(
                     })
             
             user_ids = await db.get_id_all_users()
-            success_send = 0
             for _user in user_ids:
                 _kb = kb.kb_mass_send(buttons) if buttons else None
                 try:
@@ -342,21 +342,25 @@ async def mass_send_process_command(
                         parse_mode=types.ParseMode.HTML,
                         reply_markup=_kb
                     )
-                    await asyncio.sleep(0.8)
+                    await asyncio.sleep(0.5)
                     success_send += 1
                 except Exception as e:
-                    print(f"ОШИБКА MASS SEND: {e}")
+                    print(f"ERROR MASS SEND: {e}")
                 
             text = await db.get_message("message_mass_send_success")
             await message.answer(text)
-            await message.answer(f"Успешно отправлено {success_send} из {len(user_ids)} сообщений")
-
 
             await state.reset_data()
             await state.reset_state()
-    except Exception:
+    except Exception as e:
         await state.reset_data()
         await state.reset_state()
+        print(f"ERROR BIG MASS SEND: {e}")
+    
+    try:
+        await message.answer(f"Успешно отправлено {success_send} из {len(user_ids)} сообщений")
+    except Exception:
+        await message.answer(f"Ошибка при выполнении рассылки")
 
 
 async def admin_info_command(message: types.Message, is_admin: bool):
