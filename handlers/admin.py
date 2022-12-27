@@ -352,15 +352,12 @@ async def mass_send_process_command(
 
             await state.reset_data()
             await state.reset_state()
+
+            await message.answer(f"Успешно отправлено {success_send} из {len(user_ids)} сообщений")
     except Exception as e:
         await state.reset_data()
         await state.reset_state()
         print(f"ERROR BIG MASS SEND: {e}")
-    
-    try:
-        await message.answer(f"Успешно отправлено {success_send} из {len(user_ids)} сообщений")
-    except Exception:
-        await message.answer(f"Ошибка при выполнении рассылки")
 
 
 async def admin_info_command(message: types.Message, is_admin: bool):
