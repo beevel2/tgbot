@@ -197,14 +197,14 @@ async def payout(callback_query: types.CallbackQuery):
     user = await db.get_user_by_tg_id(callback_query.from_user.id)
     min_payment = await db.get_setting('min_payment')
     min_referal = await db.get_setting('min_referal')
-    if user['balance'] < min_payment:
+    if len(user['referral_id']) < min_referal:
+        text = await db.get_message("message_payment_error_referal")
+        text = utils.replace_in_message(text, "MIN_REFERAL", min_referal)
+        await bot.send_message(callback_query.message.chat.id, text)
+    elif user['balance'] < min_payment:
         text = await db.get_message("message_payment_error_balance")
         text = utils.replace_in_message(text, "BALANCE", user['balance'])
         text = utils.replace_in_message(text, "MIN_PAYMENT", min_payment)
-        await bot.send_message(callback_query.message.chat.id, text)
-    elif len(user['referral_id']) < min_referal:
-        text = await db.get_message("message_payment_error_referal")
-        text = utils.replace_in_message(text, "MIN_REFERAL", min_referal)
         await bot.send_message(callback_query.message.chat.id, text)
     else:
         text = await db.get_message("message_check_payment_system")
