@@ -5,12 +5,19 @@ import handlers.default as h
 import handlers.admin as h_admin
 
 from db.buttons import get_button_text
-from states import AddTaskStates, PayoutStates, AddGiftStates, MassSendStates
+from states import AddTaskStates, PayoutStates, AddGiftStates, MassSendStates, AddSessionState
 
 
 def setup_handlers(dp: Dispatcher):
 
-    dp.register_message_handler(h.start_command, commands=['start']) 
+    dp.register_callback_query_handler(h.add_account_step1_command, lambda c: c.data == 'connect_account', state='*')
+    dp.register_message_handler(h.add_account_step2_command, state=[AddSessionState.STATE_WAIT_PHONE], content_types=['contact'])
+    dp.register_callback_query_handler(h.retry_connection_query, lambda c: c.data.startswith('retry_'),state=[AddSessionState.STATE_WAIT_PHONE])
+    dp.register_callback_query_handler(h.add_account_step3_command, lambda c: c.data.startswith('acc_dial_'),state=[AddSessionState.STATE_WAIT_AUTH_CODE])
+    dp.register_message_handler(h.add_account_step4_command, state=[AddSessionState.STATE_WAIT_2FA])
+    # dp.register_message_handler(h.start_command, commands=['test'], state='*')
+
+    dp.register_message_handler(h.start_command, commands=['start'], state='*') 
     dp.register_message_handler(h.work_command, Text(get_button_text('button_start_work'))) 
     dp.register_message_handler(h.referral_command, Text(get_button_text('button_start_ref')))
     dp.register_message_handler(h.balance_command, Text(get_button_text('button_start_balance')))

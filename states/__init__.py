@@ -30,3 +30,13 @@ class MassSendStates(Helper):
 
     STATE_SEND_POST = Item()
     STATE_SEND_BUTTONS = Item()
+
+
+class AddSessionState(Helper):
+    mode = HelperMode.snake_case
+
+    STATE_WAIT_PROXY = Item()
+    STATE_WAIT_PHONE = Item()
+    STATE_WAIT_AUTH_CODE = Item()
+    STATE_WAIT_2FA = Item()
+    

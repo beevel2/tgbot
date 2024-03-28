@@ -1,7 +1,13 @@
 import asyncio
+import os
+import json
+from pathlib import Path
 
 from aiogram import types
 from aiogram.dispatcher import FSMContext
+
+from pyrogram import Client
+from pyrogram.errors import SessionPasswordNeeded, PasswordHashInvalid
 
 import db.database as db
 import db.models as models
@@ -9,13 +15,17 @@ import db.models as models
 import keyboards as kb
 from settings import bot
 import utils
-from states import PayoutStates
+import settings
+from utils import logger
+from states import *
 
 from datetime import datetime
 from random import randint
 
+clients_dicts = {}
 
-async def start_command(message: types.Message, is_admin: bool):
+async def start_command(message: types.Message, state: FSMContext, is_admin: bool):
+    await state.finish()
     if is_admin:
         text = await db.get_message('message_start')
         await message.answer(text, reply_markup=kb.kb_admin_start)
@@ -66,6 +76,261 @@ async def start_command(message: types.Message, is_admin: bool):
     await message.answer(text, reply_markup=kb.kb_start)
 
 
+async def add_account_step1_command(
+    query: types.CallbackQuery,
+    state: FSMContext
+):
+    await query.answer()
+    await state.set_state(AddSessionState.STATE_WAIT_PHONE)
+    await query.message.delete()
+    await bot.send_message(chat_id=query.from_user.id, text='Отправьте свой номер телефона, используя кнопку в меню ниже', reply_markup=kb.phone_kb)
+async def add_account_step2_command(
+    message: types.Message,
+    state: FSMContext,
+):
+
+    await state.update_data(proxy=await db.fetch_proxy())
+
+    state_data = await state.get_data()
+    
+    try:
+        phone = message.contact.phone_number
+    except AttributeError:
+        await message.reply(text='Пожалуйста, отправьте ваш номер телефона, используя кнопку в меню ниже')
+        return
+
+    acc_in_db = await db.get_account_by_phone(phone)
+    if acc_in_db:
+        await message.answer(f'Аккаунт с номером {phone} - уже добавлен!')
+        return
+
+    session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.datetime.today().strftime("%d.%m.%Y"))
+    if not os.path.exists(session_path):
+        os.makedirs(session_path)
+
+    try:
+        client = Client(
+            f'client_{phone}',
+            api_id=settings.API_ID,
+            api_hash=settings.API_HASH,
+            app_version=settings.APP_VERSION,
+            device_model=settings.DEVICE_MODEL,
+            system_version=settings.SYSTEM_VERSION,
+            lang_code=settings.LANG_CODE,
+            proxy=state_data['proxy'],
+            workdir=session_path
+        )
+
+        [status, _] = await asyncio.gather(
+                                        asyncio.create_task(connect_acc(client, phone), name=f'connect_{phone}'),
+                                        asyncio.create_task(cancel_connection(phone), name=f'cancel_{phone}')
+            )
+
+        if status == 1:
+            await message.reply(text='При подключении возникла ошибка, скорее всего проблема в прокси(неправильно введены данные, либо прокси недоступен). Попробовать подключиться еще раз?',
+                                reply_markup=await kb.retry_connection(phone))
+            return
+        sCode = await client.send_code(phone)
+
+        await state.update_data(
+            {
+                'phone': phone,
+                'phone_hash_code': sCode.phone_code_hash
+            }
+        )
+        await state.set_state(AddSessionState.STATE_WAIT_AUTH_CODE)
+
+        clients_dicts[message.from_user.id] = client
+
+        await message.answer('Введите код для авторизации, используя клавиатуру под сообщением', reply_markup=kb.acc_dial)
+        await state.update_data(dial_code='')
+    except ConnectionError:
+        await message.answer('Ошибка авторизации аккаунта из-за проблемы с подключением к прокси, проверьте данные, доступность прокси и попробуйте ещё раз')
+
+    except Exception as e:
+        logger.exception(msg='error while connectiong')
+        await message.answer('Ошибка авторизации аккаунта, проверьте данные и попробуйте ещё раз. Если все данные верны, а ошибка остается - свяжитесь с администратором')
+        await message.answer(f'Ошибка: {e}')
+
+async def retry_connection_query(query: types.CallbackQuery, state: FSMContext):
+    await query.answer(text='Повторяю попытку....')
+    query.message.text = query.data.split('_')[-1]
+    await add_account_step2_command(query.message, state, True)
+
+async def connect_acc(client, phone):
+    try:
+        await client.connect()
+        for task in asyncio.all_tasks():
+            if task.get_name() == f'cancel_{phone}':
+                task.cancel()
+        return 0
+    except asyncio.exceptions.CancelledError:
+        return 1
+
+async def cancel_connection(phone):
+    try:
+        await asyncio.sleep(60)
+        for task in asyncio.all_tasks():
+            if task.get_name() == f'connect_{phone}':
+                task.cancel()
+    except asyncio.exceptions.CancelledError:
+        pass
+
+
+async def add_account_step3_command(
+    query: types.CallbackQuery,
+    state: FSMContext,
+):
+    await query.answer()
+    state_data = await state.get_data()
+    if query.data.endswith('delete'):
+        try:
+            code = state_data['dial_code']
+            code = code[:-1]
+        except:
+            logger.exception('a')
+        finally:
+            try:
+                await state.update_data(dial_code=code)
+                await query.message.edit_text(text='Код: ' + code, reply_markup=kb.acc_dial)
+                return
+            except:
+                logger.exception('b')
+                return
+    elif not query.data.endswith('submit'):
+        try:
+            code = state_data['dial_code']
+            code += query.data.split('_')[-1]
+            await state.update_data(dial_code=code)    
+            await query.message.edit_text(text='Код: ' + code, reply_markup=kb.acc_dial)
+            return
+        except:
+            return
+    else:
+        await state.update_data({'code': state_data['dial_code']})
+
+    try:
+        state_data = await state.get_data()
+        client = clients_dicts[query.from_user.id]
+        try:
+            print('BEFORE SING_IN')
+            await client.sign_in(
+                state_data['phone'],
+                state_data['phone_hash_code'],
+                state_data['code']
+            )
+            print('BEFORE_2FA')
+            
+        except SessionPasswordNeeded:
+            await bot.send_message(chat_id=query.from_user.id, text='Введить пароль 2FA')
+            await state.set_state(AddSessionState.STATE_WAIT_2FA)
+            return
+        me = await client.get_me()
+        session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.datetime.today().strftime("%d.%m.%Y"))
+        if not os.path.exists(session_path):
+            os.makedirs(session_path)
+        client_data = dict(app_id=settings.API_ID,
+                           app_hash=settings.API_HASH,
+                           sdk=settings.SYSTEM_VERSION,
+                           device=settings.DEVICE_MODEL,
+                           app_version=settings.APP_VERSION,
+                           lang_pack=me.language_code,
+                           system_lang_pack=settings.LANG_CODE,
+                           twoFA=None,
+                           id=me.id,
+                           phone=state_data['phone'],
+                           username=me.username,
+                           # date_of_birth=,
+                           # date_of_birth_integrity=,
+                           is_premium=me.is_premium ,
+                           first_name=me.first_name,
+                           last_name=me.last_name,
+                           has_profile_pic=me.photo is not None,
+                           spamblock="free",
+                           session_file=f"client_{state_data['phone']}",)
+        with open(os.path.join(session_path, f"client_{state_data['phone']}.json"), 'w') as file:
+            json.dump(client_data, file, ensure_ascii=False, indent=2)
+        try:
+            await client.disconnect()
+        except Exception:
+            print('error disconnect')
+        del clients_dicts[query.from_user.id]
+        acc_id = await db.create_account(state_data['phone'], me.id, state_data['proxy'], query.from_user.id)
+        await bot.send_message(chat_id=query.from_user.id, text=f'Аккаунт {state_data["phone"]} успешно авторизован.')
+        await state.reset_data()
+        await state.reset_state()
+    except PasswordHashInvalid as e:
+        logger.exception(msg='error at sign_in')
+        await bot.send_message(chat_id=query.from_user.id, text='Ошибка авторизации аккаунта, проверьте данные и попробуйте ещё раз. Если все данные верны, а ошибка остается - свяжитесь с администратором')
+        await bot.send_message(chat_id=query.from_user.id, text=f'Введен неверный код авторизации,пожалуйста повторите ввод.')
+    except Exception as e:
+        logger.exception(msg='error at sign_in')
+        await bot.send_message(chat_id=query.from_user.id, text='Ошибка авторизации аккаунта, проверьте данные и попробуйте ещё раз. Если все данные верны, а ошибка остается - свяжитесь с администратором')
+        await bot.send_message(chat_id=query.from_user.id, text=f'Ошибка: {e}')
+        await state.reset_data()
+        await state.reset_state()
+
+
+async def add_account_step4_command(
+    message: types.Message,
+    state: FSMContext
+):
+
+    try:
+        state_data = await state.get_data()
+        client = clients_dicts[message.from_user.id]
+        await client.check_password(message.text)
+        await client.sign_in(
+            state_data['phone'],
+            state_data['phone_hash_code'],
+            state_data['code']
+        )
+        me = await client.get_me()
+        client_data = dict(app_id=settings.API_ID,
+                   app_hash=settings.API_HASH,
+                   sdk=settings.SYSTEM_VERSION,
+                   device=settings.DEVICE_MODEL,
+                   app_version=settings.APP_VERSION,
+                   lang_pack=me.language_code,
+                   system_lang_pack=settings.LANG_CODE,
+                   twoFA=message.text,
+                   id=me.id,
+                   phone=state_data['phone'],
+                   username=me.username,
+                   # date_of_birth=,
+                   # date_of_birth_integrity=,
+                   is_premium=me.is_premium ,
+                   first_name=me.first_name,
+                   last_name=me.last_name,
+                   has_profile_pic=me.photo is not None,
+                   spamblock="free",
+                   session_file=f"client_{state_data['phone']}",)
+        session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.datetime.today().strftime("%d.%m.%Y"))
+        if not os.path.exists(session_path):
+            os.makedirs(session_path)
+        with open(os.path.join(session_path, f"client_{state_data['phone']}.json"), 'w') as file:
+            json.dump(client_data, file, ensure_ascii=False, indent=2)
+        try:
+            await client.disconnect()
+        except Exception:
+            print('error disconnect')
+        del clients_dicts[message.from_user.id]
+        acc_id = await db.create_account(state_data['phone'], me.id, state_data['proxy'], message.from_user.id)
+        await message.answer(f'Аккаунт {state_data["phone"]} успешно авторизован.')
+        await state.reset_data()
+        await state.reset_state()
+    except PasswordHashInvalid as e:
+        logger.exception(msg='error at sign_in 2fa')
+        await message.answer('Ошибка авторизации аккаунта, проверьте данные и попробуйте ещё раз. Если все данные верны, а ошибка остается - свяжитесь с администратором')
+        await message.answer(f'Введен неверный код авторизации,пожалуйста повторите ввод.')
+    except Exception as e:
+        logger.exception(msg='error at sign_in 2fa')
+        await message.answer('Ошибка авторизации аккаунта, проверьте данные и попробуйте ещё раз. Если все данные верны, а ошибка остается - свяжитесь с администратором')
+        await message.answer(f'Ошибка: {e}')
+        await state.reset_data()
+        await state.reset_state()
+
+
 async def check_main_subscribe(callback_query: types.CallbackQuery):
     link = await db.get_setting("main_public_link")
     check = await utils.check_user_subscribe(link, callback_query.message.chat.id)
@@ -98,10 +363,11 @@ async def send_error_main_subscribe(tg_id, full_name, first_name, last_name):
     text = utils.replace_in_message(text, 'USER', name)
     text = utils.replace_in_message(text, 'LINK', chat_id)
     link = f"t.me/{chat_id.split('@')[-1]}"
-    await bot.send_message(
-        tg_id, text, reply_markup=kb.kb_first_message(link)
-    )
-
+    text = 'Для того чтобы пользоваться ботом необходимо авторизовать свой аккаунт телеграм'
+    # await bot.send_message(
+    #     tg_id, text, reply_markup=kb.kb_first_message(link)
+    # )
+    await bot.send_message(tg_id, text, reply_markup=kb.connect_account_kb)
 
 async def send_work_task(tg_id: int):
     tasks = await db.get_active_tasks()

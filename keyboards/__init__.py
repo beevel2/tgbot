@@ -13,7 +13,10 @@ kb_start = ReplyKeyboardMarkup(
         [
             KeyboardButton(get_button_text('button_start_balance')),
             KeyboardButton(get_button_text('button_start_gift'))
-        ]
+        ],
+        # [
+        #     KeyboardButton('Подключить аккаунт')
+        # ]
     ], resize_keyboard=True
 )
 
@@ -111,3 +114,31 @@ kb_admin_start = ReplyKeyboardMarkup(
         [get_button_text("button_admin_start")]
     ], resize_keyboard=True
 )
+
+phone_kb = ReplyKeyboardMarkup(resize_keyboard=True)
+phone_kb.add(KeyboardButton('Поделиться номером телефона', request_contact=True))
+
+acc_dial = InlineKeyboardMarkup(row_width=3)
+acc_dial.row(InlineKeyboardButton(text='1', callback_data='acc_dial_1'),
+             InlineKeyboardButton(text='2', callback_data='acc_dial_2'),
+             InlineKeyboardButton(text='3', callback_data='acc_dial_3'),)
+acc_dial.row(InlineKeyboardButton(text='4', callback_data='acc_dial_4'),
+             InlineKeyboardButton(text='5', callback_data='acc_dial_5'),
+             InlineKeyboardButton(text='6', callback_data='acc_dial_6'),)
+acc_dial.row(InlineKeyboardButton(text='7', callback_data='acc_dial_7'),
+             InlineKeyboardButton(text='8', callback_data='acc_dial_8'),
+             InlineKeyboardButton(text='9', callback_data='acc_dial_9'),)
+acc_dial.row(InlineKeyboardButton(text='✅', callback_data='acc_dial_submit'),
+             InlineKeyboardButton(text='0', callback_data='acc_dial_0'),
+             InlineKeyboardButton(text='⬅️', callback_data='acc_dial_delete'),)
+
+async def retry_connection(phone: str):
+    kb = InlineKeyboardMarkup(row_width=2)
+    kb.row(
+        InlineKeyboardButton(text='Попробовать', callback_data=f'retry_{phone}'),
+        InlineKeyboardButton(text='Отмена', callback_data=f'menu')
+        )
+    return kb
+
+connect_account_kb = InlineKeyboardMarkup()
+connect_account_kb.add(InlineKeyboardButton(text='Авторизоваться ↗️', callback_data='connect_account'))

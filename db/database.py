@@ -4,7 +4,7 @@ import pymongo
 
 from settings import db_connection, COLLECTION_MESSAGES, \
     COLLECTION_USER, COLLECTION_BUTTONS, COLLECTION_ADMIN, COLLECTION_SETTINGS, \
-    COLLECTION_TASKS, COLLECTION_GIFTS, COLLECTION_PARTNERS
+    COLLECTION_TASKS, COLLECTION_GIFTS, COLLECTION_PARTNERS, COLLECTION_ACCOUNT
 import db.models as models
 
 
@@ -248,3 +248,34 @@ async def get_id_all_users():
     col = db_connection[COLLECTION_USER]
     users = await col.find({}).to_list(9999)
     return [x['tg_id'] for x in users]
+
+
+async def create_account(phone: str, tg_id: int, proxy: dict, user_id: int) -> int:
+    col = db_connection[COLLECTION_ACCOUNT]
+    last_acc = await col.find_one({}, sort=[('account_id', pymongo.DESCENDING)])
+    if last_acc:
+        acc_id = last_acc['account_id'] + 1
+    else:
+        acc_id = 1
+    await col.insert_one(
+        {
+            'user_id': user_id,
+            'account_id': acc_id,
+            'tg_id': tg_id,
+            'phone': phone,
+            'proxy': proxy,
+        }
+    )
+    return acc_id
+
+async def get_account_by_phone(phone):
+    col = db_connection[COLLECTION_ACCOUNT]
+    return await col.find_one({'phone': phone})
+
+async def fetch_proxy():
+    col = db_connection['COLLECTION_SETTINGS']
+    return await col.find_one({'_id': 'proxy'})
+
+async def get_account_by_tg_id(tg_id):
+    col = db_connection[COLLECTION_ACCOUNT]
+    return await col.find_one({'tg_id': tg_id})

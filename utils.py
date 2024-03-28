@@ -1,5 +1,9 @@
 from settings import bot
+import logging
 
+logging.basicConfig(level=logging.INFO, 
+                    format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
 
 def replace_in_message(message: str, s_from:str, s_to: str) -> str:
     return message.replace(f'<{s_from}>', str(s_to))

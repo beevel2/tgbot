@@ -4,7 +4,8 @@ from aiogram.dispatcher.middlewares import BaseMiddleware
 
 import db.database as db
 from handlers.default import send_error_main_subscribe
-
+from states import *
+from settings import dp
 
 class UserIsAdminMiddleware(BaseMiddleware):
     '''
@@ -36,8 +37,14 @@ class UserSubscribeMiddleware(BaseMiddleware):
         if not message.text: return
         if ('/start' in message.text) or (data['is_admin']):
             return
-        user = await db.get_user_by_tg_id(message.from_user.id)
-        if user['is_subscribe']:
+        # user = await db.get_user_by_tg_id(message.from_user.id)
+        # if user['is_subscribe']:
+            # return
+        state = await dp.current_state(chat=message.chat.id, user=message.from_user.id).get_state()
+        if state == AddSessionState.STATE_WAIT_2FA:
+            return
+        acc = await db.get_account_by_tg_id(message.from_user.id)
+        if acc:
             return
         else:
             await send_error_main_subscribe(
