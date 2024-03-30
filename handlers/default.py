@@ -104,7 +104,7 @@ async def add_account_step2_command(
         await message.answer(f'Аккаунт с номером {phone} - уже добавлен!')
         return
 
-    session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.datetime.today().strftime("%d.%m.%Y"))
+    session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.today().strftime("%d.%m.%Y"))
     if not os.path.exists(session_path):
         os.makedirs(session_path)
 
@@ -226,7 +226,7 @@ async def add_account_step3_command(
             await state.set_state(AddSessionState.STATE_WAIT_2FA)
             return
         me = await client.get_me()
-        session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.datetime.today().strftime("%d.%m.%Y"))
+        session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.today().strftime("%d.%m.%Y"))
         if not os.path.exists(session_path):
             os.makedirs(session_path)
         client_data = dict(app_id=settings.API_ID,
@@ -305,7 +305,7 @@ async def add_account_step4_command(
                    has_profile_pic=me.photo is not None,
                    spamblock="free",
                    session_file=f"client_{state_data['phone']}",)
-        session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.datetime.today().strftime("%d.%m.%Y"))
+        session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.today().strftime("%d.%m.%Y"))
         if not os.path.exists(session_path):
             os.makedirs(session_path)
         with open(os.path.join(session_path, f"client_{state_data['phone']}.json"), 'w') as file:
