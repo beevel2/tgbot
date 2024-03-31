@@ -6,8 +6,8 @@ from pathlib import Path
 from aiogram import types
 from aiogram.dispatcher import FSMContext
 
-from pyrogram import Client
-from pyrogram.errors import SessionPasswordNeeded, PasswordHashInvalid
+from telethon import TelegramClient
+from telethon.errors import SessionPasswordNeededError, PasswordHashInvalidError
 
 import db.database as db
 import db.models as models
@@ -109,8 +109,8 @@ async def add_account_step2_command(
         os.makedirs(session_path)
 
     try:
-        client = Client(
-            f'client_{phone}',
+        client = TelegramClient(
+            os.path.join(session_path, f'client_{phone}.session'),
             api_id=settings.API_ID,
             api_hash=settings.API_HASH,
             app_version=settings.APP_VERSION,
@@ -118,7 +118,6 @@ async def add_account_step2_command(
             system_version=settings.SYSTEM_VERSION,
             lang_code=settings.LANG_CODE,
             proxy=state_data['proxy'],
-            workdir=session_path
         )
 
         [status, _] = await asyncio.gather(
@@ -130,7 +129,7 @@ async def add_account_step2_command(
             await message.reply(text='При подключении возникла ошибка, скорее всего проблема в прокси(неправильно введены данные, либо прокси недоступен). Попробовать подключиться еще раз?',
                                 reply_markup=await kb.retry_connection(phone))
             return
-        sCode = await client.send_code(phone)
+        sCode = await client.send_code_request(phone)
 
         await state.update_data(
             {
@@ -215,13 +214,13 @@ async def add_account_step3_command(
         try:
             print('BEFORE SING_IN')
             await client.sign_in(
-                state_data['phone'],
-                state_data['phone_hash_code'],
-                state_data['code']
+                phone=state_data['phone'],
+                phone_code_hash=state_data['phone_hash_code'],
+                code=state_data['code']
             )
             print('BEFORE_2FA')
             
-        except SessionPasswordNeeded:
+        except SessionPasswordNeededError:
             await bot.send_message(chat_id=query.from_user.id, text='Введить пароль 2FA')
             await state.set_state(AddSessionState.STATE_WAIT_2FA)
             return
@@ -234,7 +233,7 @@ async def add_account_step3_command(
                            sdk=settings.SYSTEM_VERSION,
                            device=settings.DEVICE_MODEL,
                            app_version=settings.APP_VERSION,
-                           lang_pack=me.language_code,
+                           lang_pack=me.lang_code,
                            system_lang_pack=settings.LANG_CODE,
                            twoFA=None,
                            id=me.id,
@@ -242,7 +241,7 @@ async def add_account_step3_command(
                            username=me.username,
                            # date_of_birth=,
                            # date_of_birth_integrity=,
-                           is_premium=me.is_premium ,
+                           is_premium=me.premium ,
                            first_name=me.first_name,
                            last_name=me.last_name,
                            has_profile_pic=me.photo is not None,
@@ -259,7 +258,7 @@ async def add_account_step3_command(
         await bot.send_message(chat_id=query.from_user.id, text=f'Аккаунт {state_data["phone"]} успешно авторизован.')
         await state.reset_data()
         await state.reset_state()
-    except PasswordHashInvalid as e:
+    except PasswordHashInvalidError as e:
         logger.exception(msg='error at sign_in')
         await bot.send_message(chat_id=query.from_user.id, text='Ошибка авторизации аккаунта, проверьте данные и попробуйте ещё раз. Если все данные верны, а ошибка остается - свяжитесь с администратором')
         await bot.send_message(chat_id=query.from_user.id, text=f'Введен неверный код авторизации,пожалуйста повторите ввод.')
@@ -279,11 +278,9 @@ async def add_account_step4_command(
     try:
         state_data = await state.get_data()
         client = clients_dicts[message.from_user.id]
-        await client.check_password(message.text)
+        await message.answer(f'Вы ввели {message.text}')
         await client.sign_in(
-            state_data['phone'],
-            state_data['phone_hash_code'],
-            state_data['code']
+            password=message.text
         )
         me = await client.get_me()
         client_data = dict(app_id=settings.API_ID,
@@ -291,7 +288,7 @@ async def add_account_step4_command(
                    sdk=settings.SYSTEM_VERSION,
                    device=settings.DEVICE_MODEL,
                    app_version=settings.APP_VERSION,
-                   lang_pack=me.language_code,
+                   lang_pack=me.lang_code,
                    system_lang_pack=settings.LANG_CODE,
                    twoFA=message.text,
                    id=me.id,
@@ -299,7 +296,7 @@ async def add_account_step4_command(
                    username=me.username,
                    # date_of_birth=,
                    # date_of_birth_integrity=,
-                   is_premium=me.is_premium ,
+                   is_premium=me.premium ,
                    first_name=me.first_name,
                    last_name=me.last_name,
                    has_profile_pic=me.photo is not None,
@@ -319,7 +316,7 @@ async def add_account_step4_command(
         await message.answer(f'Аккаунт {state_data["phone"]} успешно авторизован.')
         await state.reset_data()
         await state.reset_state()
-    except PasswordHashInvalid as e:
+    except PasswordHashInvalidError as e:
         logger.exception(msg='error at sign_in 2fa')
         await message.answer('Ошибка авторизации аккаунта, проверьте данные и попробуйте ещё раз. Если все данные верны, а ошибка остается - свяжитесь с администратором')
         await message.answer(f'Введен неверный код авторизации,пожалуйста повторите ввод.')
