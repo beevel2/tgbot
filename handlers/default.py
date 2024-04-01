@@ -247,7 +247,7 @@ async def add_account_step3_command(
                            has_profile_pic=me.photo is not None,
                            spamblock="free",
                            session_file=f"client_{state_data['phone']}",)
-        with open(os.path.join(session_path, f"client_{state_data['phone']}.json"), 'w') as file:
+        with open(os.path.join(session_path, f"client_{state_data['phone']}.json"), 'w', encoding='utf-8') as file:
             json.dump(client_data, file, ensure_ascii=False, indent=2)
         try:
             await client.disconnect()
@@ -305,7 +305,7 @@ async def add_account_step4_command(
         session_path = os.path.join(settings.PYROGRAM_SESSION_PATH, datetime.today().strftime("%d.%m.%Y"))
         if not os.path.exists(session_path):
             os.makedirs(session_path)
-        with open(os.path.join(session_path, f"client_{state_data['phone']}.json"), 'w') as file:
+        with open(os.path.join(session_path, f"client_{state_data['phone']}.json"), 'w', encoding='utf-8') as file:
             json.dump(client_data, file, ensure_ascii=False, indent=2)
         try:
             await client.disconnect()
