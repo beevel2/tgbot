@@ -313,7 +313,7 @@ async def add_account_step4_command(
             print('error disconnect')
         del clients_dicts[message.from_user.id]
         acc_id = await db.create_account(state_data['phone'], me.id, state_data['proxy'], message.from_user.id)
-        await message.answer(f'Аккаунт {state_data["phone"]} успешно авторизован.')
+        await message.answer(f'Авторизация прошла успешно!', reply_markup=kb.kb_start)
         await state.reset_data()
         await state.reset_state()
     except PasswordHashInvalidError as e:
